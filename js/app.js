@@ -149,17 +149,23 @@ async function chargerMatieres() {
     });
     var data = await res.json();
     if (data.job_id) {
-      var result = await waitForJob(data.job_id);
-      if (result && result.matieres) {
+      var job = await waitForJob(data.job_id);
+      if (job && job.error) {
+        matieresGrid.innerHTML = '<span class="chip-empty">\u26a0 ' + escapeHTML(job.error) + '</span>';
+        return;
+      }
+      if (job && job.result && job.result.matieres) {
         state.matieresDisponibles = {};
-        result.matieres.forEach(function(m) { state.matieresDisponibles[m.slug || m] = m.label || m; });
+        job.result.matieres.forEach(function(m) { state.matieresDisponibles[m.slug || m] = m.label || m; });
         renderMatieres();
+      } else {
+        matieresGrid.innerHTML = '<span class="chip-empty">\u26a0 Aucune mati\u00e8re trouv\u00e9e ou timeout.</span>';
       }
     } else if (data.error) {
       matieresGrid.innerHTML = '<span class="chip-empty">\u26a0 ' + escapeHTML(data.error) + '</span>';
     }
   } catch(e) {
-    matieresGrid.innerHTML = '<span class="chip-empty">\u26a0 Erreur de connexion</span>';
+    matieresGrid.innerHTML = '<span class="chip-empty">\u26a0 Erreur de connexion : ' + escapeHTML(e.message) + '</span>';
   }
 }
 
@@ -547,9 +553,13 @@ async function waitForJob(jobId) {
   for (var i = 0; i < 300; i++) {
     try {
       var res = await fetch(url);
+      if (res.status === 404) {
+        await new Promise(function(r) { setTimeout(r, 2000); });
+        continue;
+      }
       var job = await res.json();
       if (job.status === "done" || job.status === "error") {
-        return job.result;
+        return job;
       }
     } catch(e) { /* retry */ }
     await new Promise(function(r) { setTimeout(r, 1000); });
